@@ -141,6 +141,9 @@ namespace ResDump
 			case ".dll":
 				LoadResources(name);
 				break;
+			case ".resources":
+				LoadResources(name);
+				break;
 			case ".xnb":
 				LoadXNB(name, width, height);
 				break;
@@ -160,35 +163,50 @@ namespace ResDump
 			return buf;
 		}
 
-		static void LoadResources(string name)
+		static void LoadAssembly(string name)
 		{
 			var assm = Assembly.LoadFile(name);
 			var ress = assm.GetManifestResourceNames();
 			foreach (string nres in ress)
 			{
 				var res = assm.GetManifestResourceStream(nres);
-				using (var rm = new ResourceReader(res))
+				LoadResources(res, nres);
+			}
+		}
+
+		static void LoadResources(string name)
+		{
+			using (var fs = new FileStream(name, FileMode.Open))
+			{
+				LoadResources(fs, null);
+			}
+		}
+
+		static void LoadResources(Stream res, string name)
+		{
+			using (var rm = new ResourceReader(res))
+			{
+				foreach (DictionaryEntry n in rm)
 				{
-					foreach (DictionaryEntry n in rm)
+					var mem = n.Value as Stream;
+					if (mem == null) continue;
+					try
 					{
-						var mem = n.Value as Stream;
-						if (mem == null) continue;
-						try
+						string fn = n.Key.ToString();
+						if (name != null)
+							fn = Path.Combine(fn, n.Key.ToString());
+						string path = Path.GetDirectoryName(fn);
+						if (!String.IsNullOrEmpty(path) && !Directory.Exists(path))
+							Directory.CreateDirectory(path);
+						using (var fs = new FileStream(fn, FileMode.CreateNew))
 						{
-							string fn = Path.Combine(nres, n.Key.ToString());
-							string path = Path.GetDirectoryName(fn);
-							if (!Directory.Exists(path))
-								Directory.CreateDirectory(path);
-							using (var fs = new FileStream(fn, FileMode.CreateNew))
-							{
-								var buf = ReadAll(mem);
-								fs.Write(buf, 0, buf.Length);
-							}
+							var buf = ReadAll(mem);
+							fs.Write(buf, 0, buf.Length);
 						}
-						catch (Exception ex)
-						{
-							Console.WriteLine(ex.ToString());
-						}
+					}
+					catch (Exception ex)
+					{
+						Console.WriteLine(ex.ToString());
 					}
 				}
 			}
