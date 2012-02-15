@@ -139,7 +139,7 @@ namespace ResDump
 			{
 			case ".exe":
 			case ".dll":
-				LoadResources(name);
+				LoadAssembly(name);
 				break;
 			case ".resources":
 				LoadResources(name);
@@ -165,6 +165,7 @@ namespace ResDump
 
 		static void LoadAssembly(string name)
 		{
+			name = Path.GetFullPath(name);
 			var assm = Assembly.LoadFile(name);
 			var ress = assm.GetManifestResourceNames();
 			foreach (string nres in ress)
@@ -189,15 +190,26 @@ namespace ResDump
 				foreach (DictionaryEntry n in rm)
 				{
 					var mem = n.Value as Stream;
-					if (mem == null) continue;
+					var str = n.Value as String;
 					try
 					{
 						string fn = n.Key.ToString();
 						if (name != null)
-							fn = Path.Combine(fn, n.Key.ToString());
+							fn = Path.Combine(name, n.Key.ToString());
 						string path = Path.GetDirectoryName(fn);
 						if (!String.IsNullOrEmpty(path) && !Directory.Exists(path))
 							Directory.CreateDirectory(path);
+						if (str != null)
+						{
+							using (var fs = new FileStream(fn, FileMode.CreateNew))
+							{
+								var bom = Encoding.Unicode.GetPreamble();
+								var buf = Encoding.Unicode.GetBytes(str);
+								fs.Write(bom, 0, bom.Length);
+								fs.Write(buf, 0, buf.Length);
+							}
+						}
+						if (mem == null) continue;
 						using (var fs = new FileStream(fn, FileMode.CreateNew))
 						{
 							var buf = ReadAll(mem);
