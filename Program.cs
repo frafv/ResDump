@@ -6,9 +6,11 @@ using System.IO;
 using System.Reflection;
 using System.Resources;
 using System.Collections;
+#if (!NOXNA)
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework;
+#endif
 using System.Text.RegularExpressions;
 using System.Xml;
 
@@ -144,9 +146,11 @@ namespace ResDump
 			case ".resources":
 				LoadResources(name);
 				break;
+#if (!NOXNA)
 			case ".xnb":
 				LoadXNB(name, width, height);
 				break;
+#endif
 			}
 		}
 
@@ -185,45 +189,98 @@ namespace ResDump
 
 		static void LoadResources(Stream res, string name)
 		{
+			string rn = "Resources.resx";
+			if (name != null)
+				rn = Path.Combine(name, rn);
+			using (var resx = XmlWriter.Create(rn, new XmlWriterSettings()
+			{
+				Encoding = Encoding.UTF8,
+				Indent = true,
+				IndentChars = "\t",
+				OmitXmlDeclaration = false
+			}))
 			using (var rm = new ResourceReader(res))
 			{
-				foreach (DictionaryEntry n in rm)
+				resx.WriteDocumentElement("root", () =>
 				{
-					var mem = n.Value as Stream;
-					var str = n.Value as String;
-					try
+					resx.WriteElement("resheader", () =>
 					{
-						string fn = n.Key.ToString();
-						if (name != null)
-							fn = Path.Combine(name, n.Key.ToString());
-						string path = Path.GetDirectoryName(fn);
-						if (!String.IsNullOrEmpty(path) && !Directory.Exists(path))
-							Directory.CreateDirectory(path);
-						if (str != null)
+						resx.WriteAttributeString("name", "resmimetype");
+						resx.WriteElement("value", "text/microsoft-resx");
+					});
+					resx.WriteElement("resheader", () =>
+					{
+						resx.WriteAttributeString("name", "version");
+						resx.WriteElement("value", "2.0");
+					});
+					resx.WriteElement("resheader", () =>
+					{
+						resx.WriteAttributeString("name", "reader");
+						resx.WriteElement("value", "System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+					});
+					resx.WriteElement("resheader", () =>
+					{
+						resx.WriteAttributeString("name", "writer");
+						resx.WriteElement("value", "System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+					});
+					resx.WriteElement("assembly", () =>
+					{
+						resx.WriteAttributeString("alias", "System.Windows.Forms");
+						resx.WriteAttributeString("name", "System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+					});
+
+					foreach (DictionaryEntry n in rm)
+					{
+						var mem = n.Value as Stream;
+						var str = n.Value as String;
+						try
 						{
+							string key = n.Key.ToString();
+							string fn = name != null ? Path.Combine(name, key) : key;
+							string path = Path.GetDirectoryName(fn);
+							if (!String.IsNullOrEmpty(path) && !Directory.Exists(path))
+								Directory.CreateDirectory(path);
+							if (str != null)
+							{
+								resx.WriteElement("data", () =>
+								{
+									resx.WriteAttributeString("name", n.Key.ToString());
+									resx.WriteElement("value", str);
+								});
+
+								//using (var fs = new FileStream(fn, FileMode.CreateNew))
+								//{
+								//    var bom = Encoding.Unicode.GetPreamble();
+								//    var buf = Encoding.Unicode.GetBytes(str);
+								//    fs.Write(bom, 0, bom.Length);
+								//    fs.Write(buf, 0, buf.Length);
+								//}
+							}
+							if (mem == null) continue;
+
+							resx.WriteElement("data", () =>
+							{
+								resx.WriteAttributeString("name", key);
+								resx.WriteAttributeString("type", "System.Resources.ResXFileRef, System.Windows.Forms");
+								resx.WriteElement("value", key.Replace('/', '\\') + ";" + typeof(MemoryStream).AssemblyQualifiedName);
+							});
+
 							using (var fs = new FileStream(fn, FileMode.CreateNew))
 							{
-								var bom = Encoding.Unicode.GetPreamble();
-								var buf = Encoding.Unicode.GetBytes(str);
-								fs.Write(bom, 0, bom.Length);
+								var buf = ReadAll(mem);
 								fs.Write(buf, 0, buf.Length);
 							}
 						}
-						if (mem == null) continue;
-						using (var fs = new FileStream(fn, FileMode.CreateNew))
+						catch (Exception ex)
 						{
-							var buf = ReadAll(mem);
-							fs.Write(buf, 0, buf.Length);
+							Console.WriteLine(ex.ToString());
 						}
 					}
-					catch (Exception ex)
-					{
-						Console.WriteLine(ex.ToString());
-					}
-				}
+				});
 			}
 		}
 
+#if (!NOXNA)
 		static void LoadXNB(string name, int? width, int? height)
 		{
 			var types = new List<string>();
@@ -406,5 +463,6 @@ namespace ResDump
 				});
 			}
 		}
+#endif
 	}
 }
